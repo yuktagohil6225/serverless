@@ -1,7 +1,16 @@
 {
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.454.0",
     "@google-cloud/storage": "^7.6.0",
+    "@octokit/rest": "^20.0.2",
+    "@sendgrid/mail": "^7.7.0",
+    "adm-zip": "^0.5.10",
     "aws-sdk": "^2.1501.0",
-    "node-fetch": "^3.3.2"
+    "aws-sdk-mock": "^5.8.0",
+    "node-fetch": "^3.3.2",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
   }
 }
