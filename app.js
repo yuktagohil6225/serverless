@@ -40,30 +40,30 @@ exports.handler = async (event, context) => {
     const message = snsMessage.usermessage;
     // Check if submission attempts have exceeded
     if (message === 'Submission deadline has passed.') {
-      await sendEmail(userEmail, 'Submission deadline has passed.');
+      await sendEmail(userEmail, 'Submission Failed: Submission deadline has passed.', '', submissionId);
+      return;
+    } else if (message === 'Invalid, Empty or non-ZIP GitHub release URL.') {
+      await sendEmail(userEmail, 'Submission Failed: Invalid, Empty or non-ZIP GitHub release URL.', '', submissionId);
+      return;
+    } else if (message === 'Exceeded maximum submission attempts.') {
+      await sendEmail(userEmail, 'Submission Failed: Exceeded maximum submission attempts.', '', submissionId);
+      return;
     }
-
-    if (message === 'Invalid, Empty or non-ZIP GitHub release URL.') {
-      await sendEmail(userEmail, 'Invalid, Empty or non-ZIP GitHub release URL.');
-    }
-
-    if (message === 'Exceeded maximum submission attempts.') {
-      await sendEmail(userEmail, 'Exceeded maximum submission attempts.');
-    }
-
 
     const githubReleaseURL = snsMessage.submission_url;
     
     const bucketName = 'ygohil-bucket'; // Replace with your GCS bucket name
 
-    const files = await downloadFromGitHub(githubReleaseURL);
+    const files = await downloadFromGitHub(githubReleaseURL, userEmail, submissionId);
     // await storeInGCS(files, bucketName, userEmail);
 
-    const bucketPath = await storeInGCS(files, bucketName, userEmail);
+    const bucketPath = await storeInGCS(files, bucketName, userEmail, submissionId);
+    
+    
     const emailStatus = 'Submission Successful. Downloaded branch content and stored in GCS';
     
     // Send email status
-    await sendEmail(userEmail, emailStatus, bucketPath);
+    await sendEmail(userEmail, emailStatus, bucketPath, submissionId);
 
     // Track email in DynamoDB
     await trackEmailSent(userEmail, 'Sent', submissionId);
@@ -77,7 +77,7 @@ exports.handler = async (event, context) => {
   }
 };
 
-async function downloadFromGitHub(githubReleaseURL) {
+async function downloadFromGitHub(githubReleaseURL, userEmail, submissionId) {
   try {
     const response = await axios.get(githubReleaseURL, { responseType: 'arraybuffer' });
     const zip = new AdmZip(response.data);
@@ -94,11 +94,12 @@ async function downloadFromGitHub(githubReleaseURL) {
     return filesToDownload; // Return an array of file objects with name and content
   } catch (error) {
     console.error('Error downloading content from GitHub:', error);
+    // await trackEmailSent(userEmail, 'Failed', submissionId);
     throw error;
   }
 }
 
-async function storeInGCS(files, bucketName, userEmail) {
+async function storeInGCS(files, bucketName, userEmail, submissionId) {
   try {
     const bucket = storage.bucket(bucketName);
     const userFolder = userEmail.replace('@', '_').replace('.', '_');
@@ -123,6 +124,7 @@ async function storeInGCS(files, bucketName, userEmail) {
     console.log('Files uploaded to GCS');
   } catch (error) {
     console.error('Error storing files in GCS:', error);
+    // await trackEmailSent(userEmail, 'Failed', submissionId);
     throw error;
   }
 }
@@ -130,21 +132,22 @@ async function storeInGCS(files, bucketName, userEmail) {
   const sgMail = require('@sendgrid/mail');
   sgMail.setApiKey('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'); // Replace with your SendGrid API key
   
-  async function sendEmail(userEmail, status, bucketPath) {
+  async function sendEmail(userEmail, status, bucketPath, submissionId) {
+    const bucketURL = `gs://ygohil-bucket/${bucketPath}`;
     const msg = {
       to: userEmail,
       from: 'info@ygohil.me', // Replace with your verified SendGrid email
       subject: 'Submission Status',
-      text: `Submission status: ${status}\nGCS Bucket Path: ${bucketPath}`
+      text: `Submission status: ${status}\nGCS Bucket Path: ${bucketURL}`
     };
   
     try {
       await sgMail.send(msg);
-      // await trackEmailSent(userEmail, 'Sent');
+      await trackEmailSent(userEmail, 'Sent', submissionId);
       console.log(`Email sent to ${userEmail} with status: ${status}`);
     } catch (error) {
       console.error('Error sending email:', error);
-      // await trackEmailSent(userEmail, 'Failed');
+      await trackEmailSent(userEmail, 'Failed', submissionId);
       throw error;
     }
   }
